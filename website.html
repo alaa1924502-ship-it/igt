@@ -14,6 +14,24 @@
 <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 
 <style>
+  *{
+box-sizing:border-box;
+max-width:100%;
+}
+  .cards{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+gap:20px;
+}
+  img, canvas, video{
+max-width:100%;
+height:auto;
+}
+
+body{
+margin:0;
+overflow-x:hidden;
+}
 *{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI";}
 
 body{display:flex;background:#f4f7fb;transition:0.3s;}
