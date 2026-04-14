@@ -90,7 +90,7 @@ border-radius:10px;
 <!-- SIDEBAR -->
 <div class="sidebar">
 <div class="logo">💧 Hydronix</div>
-<a href="index.html">🏠 Home</a>
+<a href="home.html">🏠 Home</a>
 <a href="خريطة.html">🌧️ Rain Map</a>
 <a href="analysis.html">📊 Analysis for investors</a>
 <a href="how.html">⚙️ System</a>
@@ -145,37 +145,51 @@ const API_KEY = "d831b8220bd3050330c5f6bed0e2690b";
 
 let map;
 
+// GLOBAL DATA
+let rainData = [];
+let labels = [];
+let chart;
+
 // ================= DARK MODE =================
 function toggleDark(){
 document.body.classList.toggle("dark");
 }
 
-// ================= WEATHER =================
-async function loadWeather(){
+// ================= WEATHER (GPS BASED) =================
+async function loadWeather(lat = 30.0444, lon = 31.2357){
 
 const res = await fetch(
-`https://api.openweathermap.org/data/2.5/forecast?q=Cairo&appid=${API_KEY}&units=metric`
+`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`
 );
 
 const data = await res.json();
 
-let labels = [];
-let rainData = [];
+labels = [];
+rainData = [];
 
 for(let i=0;i<7;i++){
 labels.push(data.list[i].dt_txt.split(" ")[0]);
 rainData.push(data.list[i].rain?.["3h"] ?? 0);
 }
 
-new Chart(document.getElementById("chart"),{
+// CHART (Real + Predicted lines)
+chart = new Chart(document.getElementById("chart"),{
 type:"line",
 data:{
 labels:labels,
-datasets:[{
-label:"Rain",
+datasets:[
+{
+label:"Real Rain",
 data:rainData,
 borderWidth:2
-}]
+},
+{
+label:"AI Prediction",
+data:new Array(rainData.length).fill(null),
+borderWidth:2,
+borderDash:[5,5]
+}
+]
 }
 });
 
@@ -189,7 +203,7 @@ Math.round(water) + " L 💧";
 
 }
 
-// ================= MAP + HEATMAP =================
+// ================= MAP + GPS =================
 async function loadMap(){
 
 navigator.geolocation.getCurrentPosition(async(pos)=>{
@@ -197,16 +211,18 @@ navigator.geolocation.getCurrentPosition(async(pos)=>{
 let lat = pos.coords.latitude;
 let lon = pos.coords.longitude;
 
+// load weather for user location
+loadWeather(lat, lon);
+
 map = L.map("map").setView([lat,lon],8);
 
 L.tileLayer("https://tile.openstreetmap.de/{z}/{x}/{y}.png").addTo(map);
 
-// marker
 L.marker([lat,lon]).addTo(map)
 .bindPopup("You are here 📍")
 .openPopup();
 
-// ================= WEATHER FOR LOCATION =================
+// WEATHER CURRENT LOCATION
 const res = await fetch(
 `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`
 );
@@ -215,19 +231,16 @@ const data = await res.json();
 
 let rain = data.rain?.["1h"] ?? 0;
 
-// ================= SAVE DATA =================
 let history = JSON.parse(localStorage.getItem("rainHistory")) || [];
 
 history.push({
-lat: lat,
-lon: lon,
-rain: rain,
+lat, lon, rain,
 date: new Date().toISOString()
 });
 
 localStorage.setItem("rainHistory", JSON.stringify(history));
 
-// ================= HEATMAP =================
+// HEATMAP
 let heatPoints = history.map(r => [
 r.lat,
 r.lon,
@@ -250,14 +263,63 @@ gradient:{
 
 }
 
-// ================= AI =================
+// ================= ML (LINEAR REGRESSION) =================
 function predictRain(){
+
+if(rainData.length === 0){
 document.getElementById("rain-status").innerText =
-"AI Prediction Running 🤖...";
+"No data yet ❌";
+return;
 }
 
-// ================= INIT =================
-loadWeather();
+// ⚡ loading animation
+document.getElementById("rain-status").innerText =
+"AI is thinking 🤖...";
+
+setTimeout(()=>{
+
+// X values (time index)
+let x = rainData.map((_,i)=>i);
+let y = rainData;
+
+// mean
+let n = x.length;
+let sumX = x.reduce((a,b)=>a+b,0);
+let sumY = y.reduce((a,b)=>a+b,0);
+
+let sumXY = x.reduce((acc,_,i)=>acc + x[i]*y[i],0);
+let sumX2 = x.reduce((acc,xi)=>acc + xi*xi,0);
+
+// slope & intercept (linear regression)
+let m = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+let b = (sumY - m*sumX) / n;
+
+// predictions
+let predicted = x.map(i => m*i + b);
+
+// update chart
+chart.data.datasets[1].data = predicted;
+chart.update();
+
+// final status
+let last = predicted[predicted.length - 1];
+
+if(last > 5){
+document.getElementById("rain-status").innerText =
+"AI Prediction: Heavy Rain 🌧️";
+} else if(last > 1){
+document.getElementById("rain-status").innerText =
+"AI Prediction: Light Rain 🌦️";
+} else {
+document.getElementById("rain-status").innerText =
+"AI Prediction: No Rain ☀️";
+}
+
+}, 1200);
+
+}
+
+// INIT
 loadMap();
 
 </script>
